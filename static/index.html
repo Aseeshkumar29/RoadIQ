@@ -87,9 +87,9 @@
         <div class="kpi-value-row">
           <div class="kpi-value" id="kpiTotalEvents">--</div>
           <div class="kpi-sparkline" id="kpiClassSplit">
-            <span class="dot-legend pothole" title="Potholes">●</span>
-            <span class="dot-legend manhole" title="Manhole Covers">●</span>
-            <span class="dot-legend bump" title="Speed Bumps">●</span>
+            <span class="dot-legend pothole" title="Potholes: Click to filter" data-filter-class="Pothole">●</span>
+            <span class="dot-legend manhole" title="Manhole Covers: Click to filter" data-filter-class="Manhole Cover">●</span>
+            <span class="dot-legend bump" title="Speed Bumps: Click to filter" data-filter-class="Speed Bump">●</span>
           </div>
         </div>
         <div class="kpi-footer">
@@ -170,6 +170,7 @@
               <option value="Manhole Cover">Manhole Cover</option>
               <option value="Speed Bump">Speed Bump</option>
               <option value="Rough Patch">Rough Patch</option>
+              <option value="Normal Road">Normal Road</option>
             </select>
           </div>
 
@@ -198,6 +199,9 @@
             </button>
             <button id="btnRecenterMap" class="btn btn-sm btn-outline" title="Reset View to NH-44 Corridor">
               <span>🎯 Center</span>
+            </button>
+            <button id="btnQuickResetFilters" class="btn btn-sm btn-ghost" title="Clear all active filters" style="display: none;">
+              <span class="btn-icon">✕</span> <span>Clear</span>
             </button>
           </div>
         </div>
@@ -281,6 +285,10 @@
               <span class="hud-tag" id="modalHudSpeed">SPEED: 45.2 km/h</span>
             </div>
             <img id="modalDefectImg" src="" alt="Dashcam evidence of detected road anomaly" class="defect-img-view">
+            <div id="modalNoImagePlaceholder" class="no-image-placeholder" style="display: none;">
+              <span class="no-img-icon">📷</span>
+              <p>No Dashcam Evidence Attached</p>
+            </div>
           </div>
 
           <div class="location-card">

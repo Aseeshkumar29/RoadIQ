@@ -139,6 +139,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Layer Groups
   const markersLayerGroup = L.layerGroup().addTo(map);
+  // Marker Registry for GIS Interaction
+  const markersByEventId = new Map();
+
+  // Unlock AudioContext on first user interaction to comply with browser policy
+  function unlockAudioOnGesture() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {}
+    } else if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    document.removeEventListener('click', unlockAudioOnGesture);
+    document.removeEventListener('keydown', unlockAudioOnGesture);
+  }
+  document.addEventListener('click', unlockAudioOnGesture, { once: true });
+  document.addEventListener('keydown', unlockAudioOnGesture, { once: true });
+
   let heatmapLayer = null;
 
   // Audio Chime Synthesizer via Web Audio API (zero external assets needed)
@@ -265,6 +283,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const heatPoints = [];
 
+    markersByEventId.clear();
+
     state.filteredAlerts.forEach(alert => {
       const lat = alert.latitude;
       const lon = alert.longitude;
@@ -277,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         highlightIncidentCard(alert.event_id);
       });
 
+      markersByEventId.set(alert.event_id, marker);
       markersLayerGroup.addLayer(marker);
 
       // Collect data for heatmap: [lat, lon, intensity]
@@ -358,6 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       card.addEventListener('click', () => {
+        highlightIncidentCard(alert.event_id, true);
         openInspectionModal(alert);
       });
 
@@ -366,12 +388,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Highlight Card when Marker is Clicked
-  function highlightIncidentCard(eventId) {
+  function highlightIncidentCard(eventId, focusMap = false) {
     document.querySelectorAll('.incident-card').forEach(c => c.classList.remove('active-selected'));
     const targetCard = document.getElementById(`card-${eventId}`);
     if (targetCard) {
       targetCard.classList.add('active-selected');
       targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    if (focusMap) {
+      const marker = markersByEventId.get(eventId);
+      if (marker) {
+        map.panTo(marker.getLatLng(), { animate: true });
+        marker.openPopup();
+      }
     }
   }
 
@@ -435,6 +464,18 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     });
 
+    const btnQuickReset = document.getElementById('btnQuickResetFilters');
+    const isFiltered = Boolean(
+      state.activeTab !== 'all' ||
+      state.filterSeverity ||
+      state.filterClass ||
+      state.filterWard ||
+      state.searchQuery
+    );
+    if (btnQuickReset) {
+      btnQuickReset.style.display = isFiltered ? 'inline-flex' : 'none';
+    }
+
     renderMapMarkers();
     renderIncidentList();
   }
@@ -468,9 +509,16 @@ document.addEventListener('DOMContentLoaded', () => {
     modalTimestamp.textContent = new Date(alert.timestamp).toUTCString();
     modalWard.textContent = alert.ward_id;
 
-    // Visual proof image
-    if (alert.image_base64) {
+    // Visual proof image with leak prevention
+    const modalNoImagePlaceholder = document.getElementById('modalNoImagePlaceholder');
+    if (alert.image_base64 && alert.image_base64.trim()) {
       modalDefectImg.src = alert.image_base64;
+      modalDefectImg.style.display = 'block';
+      if (modalNoImagePlaceholder) modalNoImagePlaceholder.style.display = 'none';
+    } else {
+      modalDefectImg.src = '';
+      modalDefectImg.style.display = 'none';
+      if (modalNoImagePlaceholder) modalNoImagePlaceholder.style.display = 'flex';
     }
     modalHudClass.textContent = `${alert.anomaly_class.toUpperCase()} DETECTED`;
     modalHudSpeed.textContent = `SPEED: ${alert.vehicle_speed} km/h`;
@@ -774,7 +822,50 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+
+  // Dynamic Edge AI and Municipal Stats
+  async function loadStats() {
+    try {
+      const res = await fetch('/api/stats');
+      if (!res.ok) return;
+      const stats = await res.json();
+      const kpiLatencyEl = document.getElementById('kpiLatency');
+      if (kpiLatencyEl && stats.avg_edge_latency_ms) {
+        kpiLatencyEl.textContent = `${stats.avg_edge_latency_ms} ms`;
+      }
+    } catch (e) {
+      console.warn("Could not load /api/stats:", e);
+    }
+  }
+
+  // Quick Reset Button
+  const btnQuickResetFilters = document.getElementById('btnQuickResetFilters');
+  if (btnQuickResetFilters) {
+    btnQuickResetFilters.addEventListener('click', resetFilters);
+  }
+
+  // Dot Legend Click-to-Filter
+  document.querySelectorAll('.dot-legend[data-filter-class]').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const targetClass = dot.dataset.filterClass;
+      if (state.filterClass === targetClass) {
+        state.filterClass = '';
+        filterClassEl.value = '';
+      } else {
+        state.filterClass = targetClass;
+        filterClassEl.value = targetClass;
+      }
+      applyFilters();
+    });
+  });
+
+  // Handle Window Resize for Leaflet
+  window.addEventListener('resize', () => {
+    map.invalidateSize();
+  });
+
   // Initial Boot
+  loadStats();
   loadAlerts();
   initWebSocket();
 });
